@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng dụng Chấm điểm Phát âm Tiếng Trung</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .phrase-box {
+            background-color: #eef2f3;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .chinese-text {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 0;
+        }
+        .pinyin-text {
+            font-size: 16px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        .btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: background 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .btn-record {
+            background-color: #e74c3c;
+        }
+        .btn-record:hover {
+            background-color: #c0392b;
+        }
+        .result-box {
+            margin-top: 25px;
+            text-align: left;
+            border-top: 2px solid #eee;
+            padding-top: 15px;
+        }
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .status {
+            font-style: italic;
+            color: #7f8c8d;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Phát âm Tiếng Trung</h1>
+    
+    <div class="phrase-box">
+        <p class="chinese-text" id="targetChinese">你好</p>
+        <p class="pinyin-text" id="targetPinyin">nǐ hǎo (Xin chào)</p>
+    </div>
+
+    <button class="btn" id="btnNext" onclick="nextPhrase()">Câu tiếp theo ➡️</button>
+    <button class="btn btn-record" id="btnSpeak" onclick="startRecognition()">🔴 Bấm và Nói</button>
+
+    <div class="result-box">
+        <p class="status" id="status">Nhấn nút màu đỏ và bắt đầu nói...</p>
+        <p><strong>Bạn đã nói:</strong> <span id="userSpeech" style="color: #2980b9; font-weight: bold;">...</span></p>
+        <div class="score" id="scoreResult">Điểm số: --%</div>
+    </div>
+</div>
+
+<script>
+    // Danh sách các câu mẫu để luyện tập
+    const wordList = [
+        { hanzi: "你好", pinyin: "nǐ hǎo (Xin chào)" },
+        { hanzi: "谢谢", pinyin: "xièxie (Cảm ơn)" },
+        { hanzi: "我爱你", pinyin: "wǒ ài nǐ (Tôi yêu bạn)" },
+        { hanzi: "今天天气很好", pinyin: "jīntiān tiānqì hěn hǎo (Hôm nay thời tiết rất tốt)" },
+        { hanzi: "我想 học 中文", pinyin: "wǒ xiǎng xué zhōngwén (Tôi muốn học tiếng Trung)" }
+    ];
+
+    let currentIndex = 0;
+
+    // Kiểm tra xem trình duyệt có hỗ trợ Web Speech API không
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert("Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Vui lòng dùng Google Chrome!");
+    }
+
+    const recognition = new SpeechRecognition ? new SpeechRecognition() : null;
+    
+    if (recognition) {
+        recognition.lang = 'zh-CN'; // Cấu hình nhận diện tiếng Trung Quốc (Giản thể)
+        recognition.interimResults = false; // Chỉ trả về kết quả cuối cùng
+        recognition.maxAlternatives = 1;
+
+        // Xử lý khi bắt đầu ghi âm
+        recognition.onstart = () => {
+            document.getElementById('status').innerText = "🔊 Đang lắng nghe... Hãy nói to, rõ ràng.";
+            document.getElementById('btnSpeak').disabled = true;
+        };
+
+        // Xử lý khi có kết quả trả về từ Google
+        recognition.onresult = (event) => {
+            const speechResult = event.results[0][0].transcript;
+            document.getElementById('userSpeech').innerText = speechResult;
+            
+            // Tính điểm
+            const targetText = document.getElementById('targetChinese').innerText;
+            const score = Math.round(similarity(targetText, speechResult) * 100);
+            
+            // Hiển thị điểm số và đánh giá nhanh
+            let evaluation = "";
+            if(score >= 80) evaluation = " Excellent! 🎉";
+            else if(score >= 50) evaluation = " Good! 👍";
+            else evaluation = " Try again! 💪";
+
+            document.getElementById('scoreResult').innerText = `Điểm số: ${score}%` + evaluation;
+            
+            // Đổi màu sắc dựa trên điểm số
+            if(score >= 70) document.getElementById('scoreResult').style.color = '#27ae60';
+            else if(score >= 40) document.getElementById('scoreResult').style.color = '#f39c12';
+            else document.getElementById('scoreResult').style.color = '#c0392b';
+        };
+
+        // Xử lý khi kết thúc hoặc lỗi
+        recognition.onspeechend = () => {
+            recognition.stop();
+            document.getElementById('btnSpeak').disabled = false;
+            document.getElementById('status').innerText = "Đã ghi âm xong.";
+        };
+
+        recognition.onerror = (event) => {
+            document.getElementById('status').innerText = "Lỗi nhận diện: " + event.error;
+            document.getElementById('btnSpeak').disabled = false;
+        };
+    }
+
+    function startRecognition() {
+        if (recognition) {
+            // Reset lại bảng hiển thị trước khi nói câu mới
+            document.getElementById('userSpeech').innerText = "...";
+            document.getElementById('scoreResult').innerText = "Điểm số: --%";
+            document.getElementById('scoreResult').style.color = '#333';
+            recognition.start();
+        }
+    }
+
+    function nextPhrase() {
+        currentIndex = (currentIndex + 1) % wordList.length;
+        document.getElementById('targetChinese').innerText = wordList[currentIndex].hanzi;
+        document.getElementById('targetPinyin').innerText = wordList[currentIndex].pinyin;
+        
+        // Reset trạng thái hiển thị
+        document.getElementById('userSpeech').innerText = "...";
+        document.getElementById('scoreResult').innerText = "Điểm số: --%";
+        document.getElementById('scoreResult').style.color = '#333';
+        document.getElementById('status').innerText = "Nhấn nút màu đỏ và bắt đầu nói...";
+    }
+
+    // Thuật toán so sánh độ tương đồng giữa 2 chuỗi văn bản (Dice's Coefficient)
+    function similarity(s1, s2) {
+        // Loại bỏ dấu câu cơ bản để so sánh chính xác hơn
+        let fixed1 = s1.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()？。，！]/g,"");
+        let fixed2 = s2.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()？。，！]/g,"");
+        
+        if (fixed1 === fixed2) return 1.0;
+        if (fixed1.length === 0 || fixed2.length === 0) return 0.0;
+
+        let pairs1 = getBigrams(fixed1);
+        let pairs2 = getBigrams(fixed2);
+        let union = pairs1.length + pairs2.length;
+        let hits = 0;
+
+        for (let x of pairs1) {
+            for (let i = 0; i < pairs2.length; i++) {
+                if (x === pairs2[i]) {
+                    hits++;
+                    pairs2.splice(i, 1);
+                    break;
+                }
+            }
+        }
+        if (union === 0) return 0.0;
+        return (2.0 * hits) / union;
+    }
+
+    function getBigrams(str) {
+        let bigrams = [];
+        for (let i = 0; i < str.length - 1; i++) {
+            bigrams.push(str.substr(i, 2));
+        }
+        return bigrams;
+    }
+</script>
+
+</body>
+</html>
